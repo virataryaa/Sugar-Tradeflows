@@ -1439,31 +1439,30 @@ with tab4:
     # SECTION 4 — DIVERGENCE HEATMAP
     # =========================================================================
     st.markdown(
-        lbl(f"Divergence Heatmap \u00b7 (Direct \u2212 Mirror) / Direct %",
+        lbl(f"Divergence Heatmap \u00b7 Direct \u2212 Mirror ({unit_label})",
             f"{_mir_sel_exp} \u2192 {_mir_sel_imp_partner}  \u00b7  by Month \u00d7 Crop Year  \u00b7  No lag applied"),
         unsafe_allow_html=True,
     )
-    st.caption("Red = exporter reports more than importer recorded  \u00b7  Blue = importer recorded more than exporter reported  \u00b7  White = close match")
+    st.caption("Red = exporter reported more than importer recorded  \u00b7  Blue = importer recorded more  \u00b7  White = close match")
 
     _hm_rows = {}
     for cy in sorted(_mir_sel_cys):
         _hd = _agg_dir[_agg_dir["CROP_YEAR"] == cy].set_index("CROP_MONTH_NUM")["BAGS"].reindex(_mir_idx)
         _hm = _agg_mir[_agg_mir["CROP_YEAR"] == cy].set_index("CROP_MONTH_NUM")["BAGS"].reindex(_mir_idx)
         _hm_rows[cy] = [
-            (_hd[i] - _hm[i]) / _hd[i] * 100
-            if pd.notna(_hd.get(i)) and _hd.get(i, 0) > 0 else np.nan
+            _hd[i] - _hm[i] if pd.notna(_hd.get(i)) and pd.notna(_hm.get(i)) else np.nan
             for i in _mir_idx
         ]
 
     _hm_df  = pd.DataFrame(_hm_rows, index=_months_lbl).T
     _vals   = _hm_df.values[~np.isnan(_hm_df.values)]
-    _hm_abs = min(max(abs(_vals.min()), abs(_vals.max())) if len(_vals) else 50, 100)
+    _hm_abs = max(abs(_vals.min()), abs(_vals.max())) if len(_vals) else 50
 
     _hm_styled = (
         _hm_df.style
         .background_gradient(cmap="RdBu_r", axis=None, vmin=-_hm_abs, vmax=_hm_abs)
         .highlight_null(color=_GC)
-        .format(lambda x: f"{x:+.1f}%" if pd.notna(x) else "", subset=pd.IndexSlice[:, _months_lbl])
+        .format(lambda x: f"{x:+{_num_fmt}}" if pd.notna(x) else "", subset=pd.IndexSlice[:, _months_lbl])
         .set_properties(**{"text-align": "center", "font-size": "8px"})
         .set_table_styles([
             {"selector": "th", "props": [("text-align","center"),("font-size","8px"),("font-weight","600")]},
