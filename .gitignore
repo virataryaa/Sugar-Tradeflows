@@ -1,5 +1,4 @@
 files/logs/
-files/data/*.parquet
 files/data/*.csv
 __pycache__/
 *.pyc
