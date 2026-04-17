@@ -1367,7 +1367,7 @@ with tab4:
         legend=dict(orientation="h", y=-0.12, x=0, font=dict(size=9, color=_TC), bgcolor="rgba(255,255,255,0.9)"),
         margin=dict(t=10, b=100, l=4, r=4), **_D,
     )
-    st.plotly_chart(fig_mir, use_container_width=True)
+    st.plotly_chart(fig_mir, use_container_width=True, key="mir_fig_mir")
     st.markdown("<hr>", unsafe_allow_html=True)
 
     # =========================================================================
@@ -1409,7 +1409,7 @@ with tab4:
             yaxis=dict(showgrid=True, gridcolor=_GC, tickfont=dict(size=9, color=_TC)),
             margin=dict(t=10, b=7, l=4, r=4), **_D,
         )
-        st.plotly_chart(fig_div1, use_container_width=True)
+        st.plotly_chart(fig_div1, use_container_width=True, key="mir_fig_div1")
 
     with div_c2:
         st.markdown(
@@ -1430,7 +1430,7 @@ with tab4:
             yaxis=dict(showgrid=True, gridcolor=_GC, tickfont=dict(size=9, color=_TC)),
             margin=dict(t=10, b=7, l=4, r=4), **_D,
         )
-        st.plotly_chart(fig_div2, use_container_width=True)
+        st.plotly_chart(fig_div2, use_container_width=True, key="mir_fig_div2")
 
     st.caption("\u2191 Red = exporter reported more than importer recorded (transit gap)  \u00b7  Blue = importer recorded more (re-exports / timing)")
     st.markdown("<hr>", unsafe_allow_html=True)
@@ -1520,7 +1520,7 @@ with tab4:
         legend=dict(orientation="h", y=-0.1, x=0, font=dict(size=9, color=_TC), bgcolor="rgba(255,255,255,0.9)"),
         margin=dict(t=10, b=80, l=4, r=4), **_D,
     )
-    st.plotly_chart(fig_cum, use_container_width=True)
+    st.plotly_chart(fig_cum, use_container_width=True, key="mir_fig_cum")
 
     st.markdown("<hr>", unsafe_allow_html=True)
     st.caption(
