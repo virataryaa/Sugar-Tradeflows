@@ -140,7 +140,7 @@ def _load_parquet_raw(path: str) -> pd.DataFrame:
 
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
-tab1, tab2, tab3 = st.tabs(["TDM", "Source", "Divergence"])
+tab1, tab2, tab3, tab4 = st.tabs(["TDM", "Source", "Divergence", "Mirror"])
 
 
 # =============================================================================
@@ -1183,4 +1183,347 @@ with tab3:
         "<span style='font-size:0.85rem;color:#8e8e93'>Coming Soon \u2014 requires Source tab data</span>"
         "</div>",
         unsafe_allow_html=True,
+    )
+
+
+# =============================================================================
+# TAB 4 — MIRROR
+# =============================================================================
+with tab4:
+
+    # ── Load both parquets ────────────────────────────────────────────────────
+    try:
+        _mdf_exp = _load_parquet_raw(FLOW_PATHS["Sugar Exports"]).copy()
+        _mdf_imp = _load_parquet_raw(FLOW_PATHS["Sugar Imports"]).copy()
+        for _mdf in [_mdf_exp, _mdf_imp]:
+            _mdf["DATE"] = pd.to_datetime(
+                _mdf[["YEAR","MONTH_NUM"]].rename(columns={"MONTH_NUM":"MONTH"}).assign(DAY=1)
+            )
+        _mdf_exp = apply_crop_year(_mdf_exp, crop_start_month)
+        _mdf_imp = apply_crop_year(_mdf_imp, crop_start_month)
+        for _mdf in [_mdf_exp, _mdf_imp]:
+            _mdf["BAGS"] = _mdf["QTY1"] / 1000 if unit_choice == "k MT" else _mdf["QTY1"] / _SB_LOT_MT
+    except Exception as e:
+        st.error(str(e)); st.stop()
+
+    # ── Selectors ─────────────────────────────────────────────────────────────
+    mc1, mc2, mc3, mc4, mc5 = st.columns([1.5, 1.5, 1.5, 1.5, 1])
+
+    _mir_exporters = sorted(_mdf_exp["REPORTER"].dropna().unique())
+    with mc1:
+        _mir_sel_exp = st.selectbox(
+            "Exporter (Reporter)", _mir_exporters,
+            index=_mir_exporters.index("Brazil") if "Brazil" in _mir_exporters else 0,
+            key="mir_exporter",
+        )
+
+    _mdf_exp_rep   = _mdf_exp[_mdf_exp["REPORTER"] == _mir_sel_exp]
+    _mir_exp_parts = sorted(_mdf_exp_rep["PARTNER"].dropna().unique())
+    with mc2:
+        _mir_def_part = next((p for p in ["United States of America","United States"] if p in _mir_exp_parts), _mir_exp_parts[0] if _mir_exp_parts else None)
+        _mir_sel_imp_partner = st.selectbox("Destination (Partner)", _mir_exp_parts,
+            index=_mir_exp_parts.index(_mir_def_part) if _mir_def_part else 0, key="mir_imp_partner")
+
+    _mir_importers = sorted(_mdf_imp["REPORTER"].dropna().unique())
+    with mc3:
+        _mir_def_imp = next((r for r in ["United States","United States of America"] if r in _mir_importers), _mir_importers[0] if _mir_importers else None)
+        _mir_sel_imp = st.selectbox("Importer (Reporter)", _mir_importers,
+            index=_mir_importers.index(_mir_def_imp) if _mir_def_imp else 0, key="mir_importer")
+
+    _mdf_imp_rep   = _mdf_imp[_mdf_imp["REPORTER"] == _mir_sel_imp]
+    _mir_imp_parts = sorted(_mdf_imp_rep["PARTNER"].dropna().unique())
+    with mc4:
+        _mir_def_origin = next((p for p in ["Brazil"] if p in _mir_imp_parts), _mir_imp_parts[0] if _mir_imp_parts else None)
+        _mir_sel_origin = st.selectbox("Origin (Partner)", _mir_imp_parts,
+            index=_mir_imp_parts.index(_mir_def_origin) if _mir_def_origin else 0, key="mir_origin")
+
+    with mc5:
+        _mir_lag = st.slider("Lag (months)", 0, 4, 1, key="mir_lag")
+
+    # Commodity type filter
+    _mir_all_tags = sorted(_mdf_exp["COMMODITY_TAG"].dropna().unique()) if "COMMODITY_TAG" in _mdf_exp.columns else []
+    if _mir_all_tags:
+        _mir_sel_tags = st.multiselect(
+            "Commodity Type", _mir_all_tags,
+            default=[t for t in ["Raw Sugar"] if t in _mir_all_tags] or _mir_all_tags,
+            key="mir_tags",
+        )
+    else:
+        _mir_sel_tags = []
+
+    # ── Filter ────────────────────────────────────────────────────────────────
+    _mir_direct = _mdf_exp_rep[_mdf_exp_rep["PARTNER"] == _mir_sel_imp_partner].copy()
+    _mir_mirror = _mdf_imp_rep[_mdf_imp_rep["PARTNER"] == _mir_sel_origin].copy()
+    if _mir_all_tags:
+        _mir_direct = _mir_direct[_mir_direct["COMMODITY_TAG"].isin(_mir_sel_tags or _mir_all_tags)]
+        _mir_mirror = _mir_mirror[_mir_mirror["COMMODITY_TAG"].isin(_mir_sel_tags or _mir_all_tags)]
+
+    # ── Lag shift helper ──────────────────────────────────────────────────────
+    def _apply_lag(df, lag):
+        if lag == 0 or df.empty:
+            return apply_crop_year(df.copy(), crop_start_month)
+        d = df.copy()
+        total        = d["YEAR"] * 12 + (d["MONTH_NUM"] - 1) - lag
+        d["YEAR"]     = total // 12
+        d["MONTH_NUM"]= total % 12 + 1
+        d["DATE"]     = pd.to_datetime(d[["YEAR","MONTH_NUM"]].rename(columns={"MONTH_NUM":"MONTH"}).assign(DAY=1))
+        return apply_crop_year(d, crop_start_month)
+
+    _mir_direct         = apply_crop_year(_mir_direct, crop_start_month)
+    _mir_mirror         = apply_crop_year(_mir_mirror, crop_start_month)
+    _mir_mirror_shifted = _apply_lag(_mir_mirror.copy(), _mir_lag)
+
+    # ── Aggregate helpers ─────────────────────────────────────────────────────
+    def _mir_agg(df):
+        if df.empty:
+            return pd.DataFrame(columns=["CROP_YEAR","CROP_MONTH_NUM","BAGS"])
+        return df.groupby(["CROP_YEAR","CROP_MONTH_NUM"])["BAGS"].sum().reset_index()
+
+    _agg_dir = _mir_agg(_mir_direct)
+    _agg_mir = _mir_agg(_mir_mirror)
+    _agg_ms  = _mir_agg(_mir_mirror_shifted)
+
+    _mir_cys = sorted(set(_agg_dir["CROP_YEAR"].tolist()) | set(_agg_mir["CROP_YEAR"].tolist()))
+
+    if not _mir_cys:
+        st.warning("No data found for this reporter/partner combination. Try a different pair.")
+        st.stop()
+
+    _mir_latest_cy = _mir_cys[-1]
+    _mir_prev_cy   = _mir_cys[-2] if len(_mir_cys) >= 2 else None
+
+    def _mir_cy_color(cy):
+        if cy == _mir_latest_cy: return _TC, 2.5
+        if cy == _mir_prev_cy:   return "#c0392b", 2.0
+        return None, 1.4
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown(
+        f"### {_mir_sel_exp} &rarr; {_mir_sel_imp_partner} &nbsp;"
+        f"<span style='font-size:0.85rem;font-weight:400;color:#6e6e73'>"
+        f"Direct vs Mirror{f'  ·  Mirror shifted -{_mir_lag}m' if _mir_lag > 0 else ''}</span>",
+        unsafe_allow_html=True,
+    )
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # Crop year range slider
+    if len(_mir_cys) >= 2:
+        _mir_cy_range = st.select_slider(
+            "Crop year range", options=_mir_cys,
+            value=(_mir_cys[0], _mir_cys[-1]), key="mir_cy_range",
+        )
+        _mir_sel_cys = [cy for cy in _mir_cys if _mir_cy_range[0] <= cy <= _mir_cy_range[1]]
+    else:
+        _mir_sel_cys = _mir_cys
+
+    # =========================================================================
+    # SECTION 2 — CORE SEASONAL CHART
+    # =========================================================================
+    st.markdown(
+        lbl(f"Direct vs Mirror ({unit_label}) \u00b7 Monthly by Crop Year",
+            f"{_mir_sel_exp} \u2192 {_mir_sel_imp_partner}  \u00b7  Mirror lag: {_mir_lag}m"),
+        unsafe_allow_html=True,
+    )
+
+    fig_mir = go.Figure()
+    _pal_i = 0
+    for cy in sorted(_mir_sel_cys):
+        color, width = _mir_cy_color(cy)
+        if color is None:
+            color = _PAL[_pal_i % len(_PAL)]; _pal_i += 1
+
+        _d_dir = _agg_dir[_agg_dir["CROP_YEAR"] == cy].sort_values("CROP_MONTH_NUM").copy()
+        _d_mir = _agg_mir[_agg_mir["CROP_YEAR"] == cy].sort_values("CROP_MONTH_NUM").copy()
+        _d_ms  = _agg_ms[_agg_ms["CROP_YEAR"] == cy].sort_values("CROP_MONTH_NUM").copy()
+        for _d in [_d_dir, _d_mir, _d_ms]:
+            _d["CROP_MONTH"] = _d["CROP_MONTH_NUM"].map(NUM_TO_MONTH)
+
+        if not _d_dir.empty:
+            fig_mir.add_trace(go.Scatter(
+                x=_d_dir["CROP_MONTH"], y=_d_dir["BAGS"], name=f"{cy} Direct",
+                mode="lines+markers", line=dict(color=color, width=width),
+                marker=dict(size=4), legendgroup=cy,
+            ))
+        if not _d_mir.empty:
+            fig_mir.add_trace(go.Scatter(
+                x=_d_mir["CROP_MONTH"], y=_d_mir["BAGS"], name=f"{cy} Mirror",
+                mode="lines+markers", line=dict(color=color, width=width, dash="dash"),
+                marker=dict(size=4, symbol="square"), legendgroup=cy,
+            ))
+        if _mir_lag > 0 and not _d_ms.empty:
+            fig_mir.add_trace(go.Scatter(
+                x=_d_ms["CROP_MONTH"], y=_d_ms["BAGS"], name=f"{cy} Mirror \u2212{_mir_lag}m",
+                mode="lines+markers", line=dict(color=color, width=width, dash="dot"),
+                marker=dict(size=4, symbol="diamond"), legendgroup=cy,
+            ))
+
+    fig_mir.update_traces(hovertemplate=_HT_BAG)
+    fig_mir.update_layout(
+        height=CHART_H * 2,
+        xaxis=dict(categoryorder="array", categoryarray=MONTH_ORDER, showgrid=False, tickfont=dict(size=9, color=_TC)),
+        yaxis=dict(showgrid=True, gridcolor=_GC, tickfont=dict(size=9, color=_TC)),
+        legend=dict(orientation="h", y=-0.12, x=0, font=dict(size=9, color=_TC), bgcolor="rgba(255,255,255,0.9)"),
+        margin=dict(t=10, b=100, l=4, r=4), **_D,
+    )
+    st.plotly_chart(fig_mir, use_container_width=True)
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # =========================================================================
+    # SECTION 3 — DIVERGENCE BAR CHART
+    # =========================================================================
+    _mir_div_cy = st.selectbox("Crop Year for Divergence Analysis", sorted(_mir_sel_cys, reverse=True), key="mir_div_cy")
+
+    _mir_idx   = list(range(1, 13))
+    _months_lbl = [NUM_TO_MONTH[i] for i in _mir_idx]
+
+    def _to_series(agg_df, cy):
+        s = agg_df[agg_df["CROP_YEAR"] == cy].set_index("CROP_MONTH_NUM")["BAGS"]
+        return s.reindex(_mir_idx, fill_value=0)
+
+    _s_dir = _to_series(_agg_dir, _mir_div_cy)
+    _s_mir = _to_series(_agg_mir, _mir_div_cy)
+    _s_ms  = _to_series(_agg_ms,  _mir_div_cy)
+
+    _div_raw     = (_s_dir - _s_mir).values
+    _div_shifted = (_s_dir - _s_ms).values
+
+    div_c1, div_c2 = st.columns(2)
+    with div_c1:
+        st.markdown(
+            lbl(f"Direct \u2212 Mirror ({unit_label}) \u00b7 No Lag",
+                f"{_mir_div_cy}  \u00b7  +ve = exporter reported more than importer recorded"),
+            unsafe_allow_html=True,
+        )
+        fig_div1 = go.Figure(go.Bar(
+            x=_months_lbl, y=_div_raw,
+            marker_color=["#c0392b" if v > 0 else "#4a7fb5" for v in _div_raw],
+            text=[f"{v:+{_num_fmt}}" for v in _div_raw],
+            textposition="outside", textfont=dict(size=8),
+        ))
+        fig_div1.add_hline(y=0, line_color="#cccccc", line_width=1)
+        fig_div1.update_layout(
+            height=CHART_H,
+            xaxis=dict(categoryorder="array", categoryarray=MONTH_ORDER, showgrid=False, tickfont=dict(size=9, color=_TC)),
+            yaxis=dict(showgrid=True, gridcolor=_GC, tickfont=dict(size=9, color=_TC)),
+            margin=dict(t=10, b=7, l=4, r=4), **_D,
+        )
+        st.plotly_chart(fig_div1, use_container_width=True)
+
+    with div_c2:
+        st.markdown(
+            lbl(f"Direct \u2212 Mirror\u2212{_mir_lag}m ({unit_label}) \u00b7 Lag Applied",
+                f"{_mir_div_cy}  \u00b7  mirror shifted back {_mir_lag} month(s)"),
+            unsafe_allow_html=True,
+        )
+        fig_div2 = go.Figure(go.Bar(
+            x=_months_lbl, y=_div_shifted,
+            marker_color=["#c0392b" if v > 0 else "#4a7fb5" for v in _div_shifted],
+            text=[f"{v:+{_num_fmt}}" for v in _div_shifted],
+            textposition="outside", textfont=dict(size=8),
+        ))
+        fig_div2.add_hline(y=0, line_color="#cccccc", line_width=1)
+        fig_div2.update_layout(
+            height=CHART_H,
+            xaxis=dict(categoryorder="array", categoryarray=MONTH_ORDER, showgrid=False, tickfont=dict(size=9, color=_TC)),
+            yaxis=dict(showgrid=True, gridcolor=_GC, tickfont=dict(size=9, color=_TC)),
+            margin=dict(t=10, b=7, l=4, r=4), **_D,
+        )
+        st.plotly_chart(fig_div2, use_container_width=True)
+
+    st.caption("\u2191 Red = exporter reported more than importer recorded (transit gap)  \u00b7  Blue = importer recorded more (re-exports / timing)")
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # =========================================================================
+    # SECTION 4 — DIVERGENCE HEATMAP
+    # =========================================================================
+    st.markdown(
+        lbl(f"Divergence Heatmap \u00b7 (Direct \u2212 Mirror) / Direct %",
+            f"{_mir_sel_exp} \u2192 {_mir_sel_imp_partner}  \u00b7  by Month \u00d7 Crop Year  \u00b7  No lag applied"),
+        unsafe_allow_html=True,
+    )
+    st.caption("Red = exporter reports more than importer recorded  \u00b7  Blue = importer recorded more than exporter reported  \u00b7  White = close match")
+
+    _hm_rows = {}
+    for cy in sorted(_mir_sel_cys):
+        _hd = _agg_dir[_agg_dir["CROP_YEAR"] == cy].set_index("CROP_MONTH_NUM")["BAGS"].reindex(_mir_idx)
+        _hm = _agg_mir[_agg_mir["CROP_YEAR"] == cy].set_index("CROP_MONTH_NUM")["BAGS"].reindex(_mir_idx)
+        _hm_rows[cy] = [
+            (_hd[i] - _hm[i]) / _hd[i] * 100
+            if pd.notna(_hd.get(i)) and _hd.get(i, 0) > 0 else np.nan
+            for i in _mir_idx
+        ]
+
+    _hm_df  = pd.DataFrame(_hm_rows, index=_months_lbl).T
+    _vals   = _hm_df.values[~np.isnan(_hm_df.values)]
+    _hm_abs = min(max(abs(_vals.min()), abs(_vals.max())) if len(_vals) else 50, 100)
+
+    _hm_styled = (
+        _hm_df.style
+        .background_gradient(cmap="RdBu_r", axis=None, vmin=-_hm_abs, vmax=_hm_abs)
+        .highlight_null(color=_GC)
+        .format(lambda x: f"{x:+.1f}%" if pd.notna(x) else "", subset=pd.IndexSlice[:, _months_lbl])
+        .set_properties(**{"text-align": "center", "font-size": "8px"})
+        .set_table_styles([
+            {"selector": "th", "props": [("text-align","center"),("font-size","8px"),("font-weight","600")]},
+        ])
+    )
+    st.dataframe(_hm_styled, use_container_width=True, height=min(35 * (len(_hm_df.index) + 3), 700))
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # =========================================================================
+    # SECTION 5 — CUMULATIVE COMPARISON
+    # =========================================================================
+    _mir_cum_cy = st.selectbox("Crop Year for Cumulative View", sorted(_mir_sel_cys, reverse=True), key="mir_cum_cy")
+
+    st.markdown(
+        lbl(f"Cumulative Comparison ({unit_label}) \u00b7 {_mir_cum_cy}",
+            f"{_mir_sel_exp} \u2192 {_mir_sel_imp_partner}  \u00b7  Direct vs Mirror vs Mirror\u2212{_mir_lag}m"),
+        unsafe_allow_html=True,
+    )
+
+    def _cum_trace(agg_df, cy):
+        d = agg_df[agg_df["CROP_YEAR"] == cy].sort_values("CROP_MONTH_NUM").copy()
+        d["CROP_MONTH"] = d["CROP_MONTH_NUM"].map(NUM_TO_MONTH)
+        d["CUM"] = d["BAGS"].cumsum()
+        return d
+
+    _c_dir = _cum_trace(_agg_dir, _mir_cum_cy)
+    _c_mir = _cum_trace(_agg_mir, _mir_cum_cy)
+    _c_ms  = _cum_trace(_agg_ms,  _mir_cum_cy)
+
+    fig_cum = go.Figure()
+    if not _c_dir.empty:
+        fig_cum.add_trace(go.Scatter(
+            x=_c_dir["CROP_MONTH"], y=_c_dir["CUM"], name="Direct",
+            mode="lines+markers", line=dict(color=_TC, width=2.5), marker=dict(size=5),
+        ))
+    if not _c_mir.empty:
+        fig_cum.add_trace(go.Scatter(
+            x=_c_mir["CROP_MONTH"], y=_c_mir["CUM"], name="Mirror",
+            mode="lines+markers", line=dict(color="#4a7fb5", width=2.0, dash="dash"),
+            marker=dict(size=5, symbol="square"),
+        ))
+    if _mir_lag > 0 and not _c_ms.empty:
+        fig_cum.add_trace(go.Scatter(
+            x=_c_ms["CROP_MONTH"], y=_c_ms["CUM"], name=f"Mirror \u2212{_mir_lag}m",
+            mode="lines+markers", line=dict(color="#e07b39", width=2.0, dash="dot"),
+            marker=dict(size=5, symbol="diamond"),
+        ))
+
+    fig_cum.update_traces(hovertemplate=_HT_BAG)
+    fig_cum.update_layout(
+        height=CHART_H * 2,
+        xaxis=dict(categoryorder="array", categoryarray=MONTH_ORDER, showgrid=False, tickfont=dict(size=9, color=_TC)),
+        yaxis=dict(showgrid=True, gridcolor=_GC, tickfont=dict(size=9, color=_TC)),
+        legend=dict(orientation="h", y=-0.1, x=0, font=dict(size=9, color=_TC), bgcolor="rgba(255,255,255,0.9)"),
+        margin=dict(t=10, b=80, l=4, r=4), **_D,
+    )
+    st.plotly_chart(fig_cum, use_container_width=True)
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.caption(
+        f"Mirror Tab  \u00b7  ETG Softs  \u00b7  "
+        f"Direct = {_mir_sel_exp} exports \u2192 {_mir_sel_imp_partner}  \u00b7  "
+        f"Mirror = {_mir_sel_imp} imports \u2190 {_mir_sel_origin}  \u00b7  "
+        f"Lag = {_mir_lag} month(s)  \u00b7  Unit: {unit_label}"
     )
