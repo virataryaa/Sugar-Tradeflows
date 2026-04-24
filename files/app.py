@@ -1322,9 +1322,10 @@ with tab4:
 
     # Crop year range slider
     if len(_mir_cys) >= 2:
+        _mir_cy_default_start = _mir_cys[-2] if len(_mir_cys) >= 2 else _mir_cys[0]
         _mir_cy_range = st.select_slider(
             "Crop year range", options=_mir_cys,
-            value=(_mir_cys[0], _mir_cys[-1]), key="mir_cy_range",
+            value=(_mir_cy_default_start, _mir_cys[-1]), key="mir_cy_range",
         )
         _mir_sel_cys = [cy for cy in _mir_cys if _mir_cy_range[0] <= cy <= _mir_cy_range[1]]
     else:
