@@ -80,6 +80,15 @@ FLOW_PATHS = {
     "Sugar Imports (EU Only)": str(_DATA / "tdm_sugar_imports_eu.parquet"),
 }
 
+import datetime as _dt
+with st.sidebar:
+    st.markdown("---")
+    for _lbl, _fp in FLOW_PATHS.items():
+        _p = Path(_fp)
+        if _p.exists():
+            _mt = _dt.datetime.fromtimestamp(_p.stat().st_mtime).strftime("%d %b %Y %H:%M")
+            st.caption(f"**{_lbl}**  \n{_mt}")
+
 _D = dict(
     template=_TMPL,
     paper_bgcolor="rgba(0,0,0,0)",
@@ -164,10 +173,6 @@ with tab1:
     unit_label      = unit_choice
 
     data_path = Path(FLOW_PATHS[flow_choice])
-    if data_path.exists():
-        import datetime as _dt
-        _mtime = _dt.datetime.fromtimestamp(data_path.stat().st_mtime).strftime("%d %b %Y %H:%M")
-        st.caption(f"Last updated: {_mtime}")
     try:
         df = _load_parquet_raw(str(data_path)).copy()
         df["DATE"] = pd.to_datetime(df[["YEAR","MONTH_NUM"]].rename(columns={"MONTH_NUM":"MONTH"}).assign(DAY=1))
