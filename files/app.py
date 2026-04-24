@@ -164,6 +164,10 @@ with tab1:
     unit_label      = unit_choice
 
     data_path = Path(FLOW_PATHS[flow_choice])
+    if data_path.exists():
+        import datetime as _dt
+        _mtime = _dt.datetime.fromtimestamp(data_path.stat().st_mtime).strftime("%d %b %Y %H:%M")
+        st.caption(f"Last updated: {_mtime}")
     try:
         df = _load_parquet_raw(str(data_path)).copy()
         df["DATE"] = pd.to_datetime(df[["YEAR","MONTH_NUM"]].rename(columns={"MONTH_NUM":"MONTH"}).assign(DAY=1))
@@ -1228,14 +1232,16 @@ with tab4:
 
     _mir_importers = sorted(_mdf_imp["REPORTER"].dropna().unique())
     with mc3:
-        _mir_def_imp = next((r for r in ["United States","United States of America"] if r in _mir_importers), _mir_importers[0] if _mir_importers else None)
+        _mir_def_imp = _mir_sel_imp_partner if _mir_sel_imp_partner in _mir_importers else \
+            next((r for r in ["United States","United States of America"] if r in _mir_importers), _mir_importers[0] if _mir_importers else None)
         _mir_sel_imp = st.selectbox("Importer (Reporter)", _mir_importers,
             index=_mir_importers.index(_mir_def_imp) if _mir_def_imp else 0, key="mir_importer")
 
     _mdf_imp_rep   = _mdf_imp[_mdf_imp["REPORTER"] == _mir_sel_imp]
     _mir_imp_parts = sorted(_mdf_imp_rep["PARTNER"].dropna().unique())
     with mc4:
-        _mir_def_origin = next((p for p in ["Brazil"] if p in _mir_imp_parts), _mir_imp_parts[0] if _mir_imp_parts else None)
+        _mir_def_origin = _mir_sel_exp if _mir_sel_exp in _mir_imp_parts else \
+            next((p for p in ["Brazil"] if p in _mir_imp_parts), _mir_imp_parts[0] if _mir_imp_parts else None)
         _mir_sel_origin = st.selectbox("Origin (Partner)", _mir_imp_parts,
             index=_mir_imp_parts.index(_mir_def_origin) if _mir_def_origin else 0, key="mir_origin")
 

@@ -41,7 +41,7 @@ log = logging.getLogger(__name__)
 API_KEY  = "xngwppoelwepdtqylwakbfmyqxuytfnl"
 BASE_URL = "https://www1.tdmlogin.com/tdm/api/api.asp"
 
-REPORTERS = "BR,TH,IN,GT,AR,MX,SV"
+REPORTERS = "BR,TH,IN,GT,AR,MX,SV,KR,MA,CA,JP,DZ"
 
 HS_CODES = ["1701"]   # 4-digit; levelDetail=6 returns 6-digit breakdown
 
@@ -75,7 +75,12 @@ REPORTER_REGION = {
     "Guatemala":   "LATAM",
     "Argentina":   "LATAM",
     "Mexico":      "LATAM",
-    "El Salvador": "LATAM",
+    "El Salvador":      "LATAM",
+    "Korea, Republic of": "Asia",
+    "Morocco":          "Africa",
+    "Canada":           "NAM",
+    "Japan":            "Asia",
+    "Algeria":          "Africa",
 }
 
 PARTNER_FIX = {

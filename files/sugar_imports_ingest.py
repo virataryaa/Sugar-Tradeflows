@@ -37,7 +37,7 @@ log = logging.getLogger(__name__)
 API_KEY  = "xngwppoelwepdtqylwakbfmyqxuytfnl"
 BASE_URL = "https://www1.tdmlogin.com/tdm/api/api.asp"
 
-REPORTERS = "ID,US,CN,MY"
+REPORTERS = "ID,US,CN,MY,JP,SA,DZ"
 
 HS_CODES = ["1701"]
 
@@ -71,6 +71,9 @@ REPORTER_REGION = {
     "China":                        "Asia",
     "China, People's Republic of":  "Asia",
     "Malaysia":                     "Asia",
+    "Japan":                        "Asia",
+    "Saudi Arabia":                 "MEA",
+    "Algeria":                      "Africa",
 }
 
 PARTNER_FIX = {
