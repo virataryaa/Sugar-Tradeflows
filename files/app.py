@@ -1235,10 +1235,11 @@ with tab4:
         _mir_sel_imp_partner = st.selectbox("Destination (Partner)", _mir_exp_parts,
             index=_mir_exp_parts.index(_mir_def_part) if _mir_def_part else 0, key="mir_imp_partner")
 
+    _ALIAS = {"United States of America": "United States", "United States": "United States of America"}
     _mir_importers = sorted(_mdf_imp["REPORTER"].dropna().unique())
     with mc3:
-        _mir_def_imp = _mir_sel_imp_partner if _mir_sel_imp_partner in _mir_importers else \
-            next((r for r in ["United States","United States of America"] if r in _mir_importers), _mir_importers[0] if _mir_importers else None)
+        _dest_candidates = [_mir_sel_imp_partner, _ALIAS.get(_mir_sel_imp_partner, "")]
+        _mir_def_imp = next((r for r in _dest_candidates if r in _mir_importers), _mir_importers[0] if _mir_importers else None)
         _mir_sel_imp = st.selectbox("Importer (Reporter)", _mir_importers,
             index=_mir_importers.index(_mir_def_imp) if _mir_def_imp else 0, key="mir_importer")
 
