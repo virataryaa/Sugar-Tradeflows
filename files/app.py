@@ -250,7 +250,7 @@ with tab1:
                 if all_tags:
                     _ov_tag_key = f"{_fk}_ov_tags"
                     _sf_tag = [t for t in st.session_state.get(f"{_sf}_tags", []) if t in all_tags]
-                    if not _sf_tag:
+                    if f"{_sf}_tags" not in st.session_state:
                         _sf_tag = [t for t in ["Raw Sugar"] if t in all_tags] or all_tags
                     st.session_state[_ov_tag_key] = _sf_tag
                     sel_tags = st.multiselect("Type", all_tags,
@@ -864,7 +864,7 @@ with tab1:
         with dest_fc3:
             if _dest_all_types:
                 _dd_tag_sf = [t for t in st.session_state.get(f"{_sf}_tags", []) if t in _dest_all_types]
-                if not _dd_tag_sf:
+                if f"{_sf}_tags" not in st.session_state:
                     _dd_tag_sf = _dest_all_types
                 st.session_state[f"{_fk}_dest_tags"] = _dd_tag_sf
                 dest_tags = st.multiselect("Type", _dest_all_types,
