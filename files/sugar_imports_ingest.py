@@ -15,6 +15,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from _summary import write_summary
+
 import country_converter as coco
 import numpy as np
 import pandas as pd
@@ -37,7 +39,7 @@ log = logging.getLogger(__name__)
 API_KEY  = "xngwppoelwepdtqylwakbfmyqxuytfnl"
 BASE_URL = "https://www1.tdmlogin.com/tdm/api/api.asp"
 
-REPORTERS = "ID,US,CN,MY,JP,SA,DZ"
+REPORTERS = "ID,US,CN,MY,JP,SA,DZ,KR,IN,EG,MA,NG"
 
 HS_CODES = ["1701"]
 
@@ -57,6 +59,7 @@ COLUMNS    = ["REPORTER", "PARTNER", "COMMODITY", "YEAR", "MONTH", "QTY1"]
 DEDUP_KEYS = ["REPORTER", "PARTNER", "COMMODITY", "YEAR", "MONTH"]
 
 COMMODITY_TAG = {
+    170111: "Raw Sugar",
     170112: "Raw Sugar",
     170113: "Raw Sugar",
     170114: "Raw Sugar",
@@ -74,6 +77,12 @@ REPORTER_REGION = {
     "Japan":                        "Asia",
     "Saudi Arabia":                 "MEA",
     "Algeria":                      "Africa",
+    "South Korea":                  "Asia",
+    "Korea, Republic of":           "Asia",
+    "India":                        "Asia",
+    "Egypt":                        "Africa",
+    "Morocco":                      "Africa",
+    "Nigeria":                      "Africa",
 }
 
 PARTNER_FIX = {
@@ -189,13 +198,18 @@ def main():
 
     if OUT_FILE.exists() and not args.full:
         old_data = pd.read_parquet(OUT_FILE)
-        log.info("Existing: %d rows", len(old_data))
+        rows_before = len(old_data)
+        old_ym = set(zip(old_data["YEAR"].astype(int), old_data["MONTH"].astype(int)))
+        log.info("Existing: %d rows", rows_before)
         df = merge_and_dedup(old_data, new_data)
     else:
+        rows_before = 0
+        old_ym = set()
         df = new_data.copy()
 
     df.to_parquet(OUT_FILE, engine="pyarrow", index=False)
     log.info("Saved -> %s  |  %d rows", OUT_FILE, len(df))
+    write_summary(LOG_DIR, "Sugar Imports", OUT_FILE.name, rows_before, df, old_ym)
     log.info("=" * 60)
 
 
