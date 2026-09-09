@@ -140,7 +140,7 @@ def apply_crop_year(df: pd.DataFrame, start_month: int) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=600)
-def _load_parquet_raw(path: str) -> pd.DataFrame:
+def _load_parquet_cached(path: str, mtime: float) -> pd.DataFrame:
     _p = path.replace("\\", "/")
     df = duckdb.sql(f"SELECT * FROM '{_p}'").df()
     if "MONTH" in df.columns and "MONTH_NUM" not in df.columns:
@@ -148,6 +148,15 @@ def _load_parquet_raw(path: str) -> pd.DataFrame:
     if "REPORTER_REGION" not in df.columns:
         df["REPORTER_REGION"] = "Other"
     return df
+
+
+def _load_parquet_raw(path: str) -> pd.DataFrame:
+    """Cache keyed on file mtime so a rebuilt parquet is picked up immediately."""
+    try:
+        _mt = Path(path).stat().st_mtime
+    except OSError:
+        _mt = 0.0
+    return _load_parquet_cached(path, _mt)
 
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
