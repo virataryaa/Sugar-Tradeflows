@@ -76,6 +76,7 @@ _DATA = Path(__file__).parent / "data"
 
 FLOW_PATHS = {
     "Sugar Exports":           str(_DATA / "tdm_sugar_exports.parquet"),
+    "Sugar Exports (EU Only)": str(_DATA / "tdm_sugar_exports_eu.parquet"),
     "Sugar Imports":           str(_DATA / "tdm_sugar_imports.parquet"),
     "Sugar Imports (EU Only)": str(_DATA / "tdm_sugar_imports_eu.parquet"),
 }
@@ -173,9 +174,10 @@ with tab1:
         label_visibility="collapsed",
     )
 
-    _fk = {"Sugar Exports": "exp", "Sugar Imports": "imp", "Sugar Imports (EU Only)": "eu"}[flow_choice]
+    _fk = {"Sugar Exports": "exp", "Sugar Exports (EU Only)": "eu_exp",
+           "Sugar Imports": "imp", "Sugar Imports (EU Only)": "eu"}[flow_choice]
 
-    _is_exports     = flow_choice == "Sugar Exports"
+    _is_exports     = flow_choice in ("Sugar Exports", "Sugar Exports (EU Only)")
     flow_label      = "Exports" if _is_exports else "Imports"
     _dest_noun      = "Destination" if _is_exports else "Origin"
     _dest_arrow_tab = "Rep \u2192 Dest" if _is_exports else "Rep \u2190 Origin"

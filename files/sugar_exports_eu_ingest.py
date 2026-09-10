@@ -1,11 +1,11 @@
 """
-Hardmine — TDM Sugar Exports Ingest
-=====================================
+Hardmine — TDM Sugar EU Exports Ingest
+========================================
 Usage:
-    python sugar_exports_ingest.py            # incremental
-    python sugar_exports_ingest.py --full     # full history from 201501
+    python sugar_exports_eu_ingest.py            # incremental
+    python sugar_exports_eu_ingest.py --full     # full history from 201401
 
-Saves to: .../Sugar Flow/files/data/tdm_sugar_exports.parquet
+Saves to: .../Sugar Flow/files/data/tdm_sugar_exports_eu.parquet
 """
 
 import argparse
@@ -22,7 +22,6 @@ import numpy as np
 import pandas as pd
 import requests
 
-# ── Logging ───────────────────────────────────────────────────────────────────
 LOG_DIR = Path(__file__).parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
@@ -32,32 +31,29 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler(LOG_DIR / "sugar_exports_ingest.log", encoding="utf-8"),
+        logging.FileHandler(LOG_DIR / "sugar_exports_eu_ingest.log", encoding="utf-8"),
     ],
 )
 log = logging.getLogger(__name__)
 
-# ══════════════════════════════════════════════════════════════════════════════
-# CONFIG
-# ══════════════════════════════════════════════════════════════════════════════
 API_KEY  = "xngwppoelwepdtqylwakbfmyqxuytfnl"
 BASE_URL = "https://www1.tdmlogin.com/tdm/api/api.asp"
 
-REPORTERS = "BR,TH,IN,GT,AR,MX,SV,KR,MA,CA,JP,DZ,PK"
+REPORTERS = "E28"
 
-HS_CODES = ["1701"]   # 4-digit; levelDetail=6 returns 6-digit breakdown
+HS_CODES = ["1701"]
 
 FLOW         = "E"
 LEVEL        = "6"
 FREQUENCY    = "M"
 SEPARATOR    = "T"
 AGG_PARTNERS = "Y"
-CONV         = "1"   # quantities in MT
+CONV         = "1"
 
-PERIOD_FULL_BEGIN = "201501"
+PERIOD_FULL_BEGIN = "201401"
 PERIOD_END        = "203012"
 
-OUT_FILE = Path(__file__).parent / "data" / "tdm_sugar_exports.parquet"
+OUT_FILE = Path(__file__).parent / "data" / "tdm_sugar_exports_eu.parquet"
 
 COLUMNS    = ["REPORTER", "PARTNER", "COMMODITY", "YEAR", "MONTH", "QTY1"]
 DEDUP_KEYS = ["REPORTER", "PARTNER", "COMMODITY", "YEAR", "MONTH"]
@@ -71,20 +67,10 @@ COMMODITY_TAG = {
 }
 
 REPORTER_REGION = {
-    "Brazil":      "LATAM",
-    "Thailand":    "Asia",
-    "India":       "Asia",
-    "Guatemala":   "LATAM",
-    "Argentina":   "LATAM",
-    "Mexico":      "LATAM",
-    "El Salvador":      "LATAM",
-    "South Korea":       "Asia",
-    "Korea, Republic of": "Asia",
-    "Morocco":          "Africa",
-    "Canada":           "NAM",
-    "Japan":            "Asia",
-    "Algeria":          "Africa",
-    "Pakistan":         "Asia",
+    "European Union": "Europe",
+    "EU-28":          "Europe",
+    "EU28":           "Europe",
+    "E28":            "Europe",
 }
 
 PARTNER_FIX = {
@@ -132,7 +118,7 @@ def build_url(period_begin: str) -> str:
 
 def fetch_tdm(period_begin: str) -> pd.DataFrame:
     url = build_url(period_begin)
-    log.info("Fetching Sugar Exports from %s ...", period_begin)
+    log.info("Fetching Sugar EU Exports from %s ...", period_begin)
     resp = requests.get(url, timeout=120)
     resp.raise_for_status()
     df = pd.read_csv(io.StringIO(resp.content.decode("utf-16")), sep="\t", low_memory=False)
@@ -145,7 +131,6 @@ def fetch_tdm(period_begin: str) -> pd.DataFrame:
 
 
 def add_derived_columns(df: pd.DataFrame) -> pd.DataFrame:
-    # Crop year (Jan–Dec default; app overwrites dynamically)
     df["CROP_YEAR"]      = df["YEAR"].astype(str)
     df["CROP_MONTH_NUM"] = df["MONTH"]
 
@@ -161,7 +146,7 @@ def add_derived_columns(df: pd.DataFrame) -> pd.DataFrame:
         ["Other", "NAM", "LATAM", "Europe", "Asia", "Africa", "Oceania"],
         default="Other",
     )
-    df["REPORTER_REGION"] = df["REPORTER"].map(REPORTER_REGION).fillna("Other")
+    df["REPORTER_REGION"] = df["REPORTER"].map(REPORTER_REGION).fillna("Europe")
     df["COMMODITY_TAG"]   = df["COMMODITY"].map(COMMODITY_TAG)
     return df
 
@@ -179,12 +164,12 @@ def merge_and_dedup(old: pd.DataFrame, new: pd.DataFrame) -> pd.DataFrame:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Sugar Exports Ingest")
+    parser = argparse.ArgumentParser(description="Sugar EU Exports Ingest")
     parser.add_argument("--full", action="store_true")
     args = parser.parse_args()
 
     log.info("=" * 60)
-    log.info("Sugar Exports Ingest  |  %s", datetime.now().strftime("%Y-%m-%d %H:%M"))
+    log.info("Sugar EU Exports Ingest  |  %s", datetime.now().strftime("%Y-%m-%d %H:%M"))
     log.info("Mode: %s", "FULL" if args.full else "INCREMENTAL")
 
     OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -212,7 +197,7 @@ def main():
 
     df.to_parquet(OUT_FILE, engine="pyarrow", index=False)
     log.info("Saved -> %s  |  %d rows", OUT_FILE, len(df))
-    write_summary(LOG_DIR, "Sugar Exports", OUT_FILE.name, rows_before, df, old_ym)
+    write_summary(LOG_DIR, "Sugar EU Exports", OUT_FILE.name, rows_before, df, old_ym)
     log.info("=" * 60)
 
 
