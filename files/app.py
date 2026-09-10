@@ -140,6 +140,15 @@ def apply_crop_year(df: pd.DataFrame, start_month: int) -> pd.DataFrame:
     return df
 
 
+def current_crop_year(start_month: int) -> str:
+    """Label of the crop year today falls in, formatted like apply_crop_year."""
+    _t  = _dt.date.today()
+    _ys = _t.year - (1 if _t.month < start_month else 0)
+    if start_month == 1:
+        return str(_ys)
+    return f"{_ys % 100:02d}/{(_ys + 1) % 100:02d}"
+
+
 @st.cache_data(ttl=600)
 def _load_parquet_cached(path: str, mtime: float) -> pd.DataFrame:
     _p = path.replace("\\", "/")
@@ -312,15 +321,25 @@ with tab1:
 
         if not dff.empty:
             latest_cy         = sorted(dff["CROP_YEAR"].unique())[-1]
-            lm_per_rep        = dff[dff["CROP_YEAR"] == latest_cy].groupby("REPORTER")["CROP_MONTH_NUM"].max()
-            latest_common_num = int(lm_per_rep.min()) if len(lm_per_rep) else 12
-            latest_common_label = NUM_TO_MONTH[latest_common_num]
-            dff_disp = dff[
-                (dff["CROP_YEAR"] < latest_cy) |
-                ((dff["CROP_YEAR"] == latest_cy) & (dff["CROP_MONTH_NUM"] <= latest_common_num))
-            ].copy()
+            # Only the crop year we are currently living through is partial. When a reporter's
+            # feed stops earlier (Pakistan exports end May 2025), its last year has still fully
+            # elapsed: it keeps a real Total, no month cap and no projection.
+            _partial_cy       = latest_cy if latest_cy == current_crop_year(crop_start_month) else None
+            if _partial_cy:
+                lm_per_rep          = dff[dff["CROP_YEAR"] == latest_cy].groupby("REPORTER")["CROP_MONTH_NUM"].max()
+                latest_common_num   = int(lm_per_rep.min()) if len(lm_per_rep) else 12
+                latest_common_label = NUM_TO_MONTH[latest_common_num]
+                dff_disp = dff[
+                    (dff["CROP_YEAR"] < latest_cy) |
+                    ((dff["CROP_YEAR"] == latest_cy) & (dff["CROP_MONTH_NUM"] <= latest_common_num))
+                ].copy()
+            else:
+                latest_common_num   = 12
+                latest_common_label = MONTH_ORDER[-1]
+                dff_disp            = dff.copy()
         else:
-            latest_cy = ""; latest_common_num = 12; latest_common_label = MONTH_ORDER[-1]
+            latest_cy = ""; _partial_cy = None
+            latest_common_num = 12; latest_common_label = MONTH_ORDER[-1]
             dff_disp = dff.copy()
 
         if not dff_disp.empty and dff_disp["CROP_YEAR"].nunique() > 1:
@@ -645,8 +664,8 @@ with tab1:
         # ── Heatmap ───────────────────────────────────────────────────────────
         st.markdown(lbl(f"Flow Heatmap ({unit_label}) \u00b7 Monthly {flow_label} by Crop Year", _t1_sub), unsafe_allow_html=True)
         st.caption(
-            f"Latest crop year ({latest_cy}) capped at {latest_common_label}  \u00b7  "
-            f"Light grey = no data  \u00b7  Total shown only for complete {MONTH_ORDER[0]}\u2013{MONTH_ORDER[-1]} years  \u00b7  "
+            (f"Latest crop year ({latest_cy}) capped at {latest_common_label}  \u00b7  " if _partial_cy else "")
+            + f"Light grey = no data  \u00b7  Total shown only for crop years that have fully elapsed  \u00b7  "
             f"Min / Max / Avg rows based on last 10 complete crop years"
         )
 
@@ -656,7 +675,8 @@ with tab1:
         complete_sel = complete.reindex(disp_sel.index)
         _ytd_col = f"YTD ({MONTH_ORDER[0]}\u2013{latest_common_label})"
         _yoy_col = "YoY%"
-        disp_sel["Total"]   = np.where(disp_sel.index != latest_cy, disp_sel[MONTH_ORDER].sum(axis=1), np.nan)
+        _hide_total         = (disp_sel.index == _partial_cy) if _partial_cy else np.zeros(len(disp_sel), dtype=bool)
+        disp_sel["Total"]   = np.where(_hide_total, np.nan, disp_sel[MONTH_ORDER].sum(axis=1))
         disp_sel[_ytd_col]  = disp_sel[MONTH_ORDER[:latest_common_num]].sum(axis=1, min_count=1)
         _yoy_map            = ytd.set_index("CROP_YEAR")["YOY_PCT"].to_dict()
         disp_sel[_yoy_col]  = [_yoy_map.get(cy, np.nan) for cy in disp_sel.index]
